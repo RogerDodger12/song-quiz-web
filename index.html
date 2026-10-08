@@ -210,6 +210,7 @@
 </main>
 
 <script src="songs.js"></script>
+<script src="voices.js"></script>
 <script>
 (function () {
   // Your Cloudflare Worker proxy for Deezer
@@ -287,7 +288,7 @@
     try {
       if (!actx) {
         const C = window.AudioContext || window.webkitAudioContext;
-        if (C) { actx = new C(); buildSfx(); }
+        if (C) { actx = new C(); buildSfx(); decodeClips(); }
       }
       if (actx && actx.state === "suspended") actx.resume();
     } catch (e) { /* sound is a nice extra: never let it get in the way */ }
@@ -313,7 +314,7 @@
     win: () => playSfx("win"),
   };
 
-  // ---------- Comments after each answer (shown on screen, and spoken when sound is on) ----------
+  // ---------- Comments after each answer (shown on screen, and played from recordings when sound is on) ----------
   const QUIPS = {
     great: [
       "You nailed it!",
@@ -340,8 +341,6 @@
       "Somewhere, a songwriter is half proud of you.",
     ],
     miss: [
-      "Wow. Just... wow.",
-      "Were you even listening?",
       "That was a bold guess. And a wrong one.",
       "Swing and a miss.",
       "My toaster has better taste in music.",
@@ -359,32 +358,93 @@
     return lastQuip;
   }
   let quipTimer = null;
+  let voiceEn = null;
+  const speechOK = () => !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  function pickVoice() {
+    try {
+      const vs = window.speechSynthesis.getVoices() || [];
+      voiceEn = vs.find((v) => /^en[-_]US/i.test(v.lang) && v.localService) ||
+                vs.find((v) => /^en/i.test(v.lang)) || null;
+    } catch (e) { /* ignore */ }
+  }
+  if (speechOK()) {
+    pickVoice();
+    try { window.speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) { /* ignore */ }
+  }
   function cancelSpeech() {
     clearTimeout(quipTimer);
-    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    stopQuipClip();
+    try { if (speechOK()) window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+  }
+  function say(text) {
+    const ss = window.speechSynthesis;
+    if (ss.paused) ss.resume();
+    const u = new window.SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = 1.0;
+    u.volume = 1;
+    if (voiceEn) u.voice = voiceEn;
+    ss.speak(u);
+  }
+  function speakNow(text) {
+    try {
+      const ss = window.speechSynthesis;
+      if (ss.speaking || ss.pending) {
+        ss.cancel();
+        setTimeout(() => { try { say(text); } catch (e) { /* ignore */ } }, 80); // iPhones drop speech sent right after a cancel
+      } else {
+        say(text);
+      }
+    } catch (e) { /* the voice is a nice extra: ignore any problem */ }
   }
   function speak(text, delayMs) {
-    if (!sfxOn || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+    if (!sfxOn || !speechOK()) return;
     clearTimeout(quipTimer);
-    quipTimer = setTimeout(() => {
-      try {
-        window.speechSynthesis.cancel();
-        const u = new window.SpeechSynthesisUtterance(text);
-        u.lang = "en-US";
-        u.rate = 1.05;
-        window.speechSynthesis.speak(u);
-      } catch (e) { /* the voice is a nice extra: ignore any problem */ }
-    }, delayMs || 0);
+    if (!delayMs) { speakNow(text); return; } // straight from the tap, which iPhones like best
+    quipTimer = setTimeout(() => speakNow(text), delayMs);
   }
-  // iPhones only allow speech after a tap, so a silent "hello" on Start unlocks it
-  function unlockSpeech() {
+  // Recorded voice: the clips in voices.js are decoded once the game starts, then played through the same
+  // audio system as the chime. If a clip isn't ready (or voices.js is missing), the phone's own voice steps in.
+  const quipBuffers = {};
+  let quipSource = null;
+  function dataToArrayBuffer(uri) {
+    const bin = atob(uri.slice(uri.indexOf(",") + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+  function decodeClips() {
+    if (!actx || typeof QUIP_AUDIO === "undefined") return;
+    Object.keys(QUIP_AUDIO).forEach((text) => {
+      if (quipBuffers[text]) return;
+      try {
+        const p = actx.decodeAudioData(dataToArrayBuffer(QUIP_AUDIO[text]),
+          (buf) => { quipBuffers[text] = buf; }, () => { /* skip a clip that won't decode */ });
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) { /* ignore */ }
+    });
+  }
+  function stopQuipClip() {
+    if (quipSource) { try { quipSource.stop(); } catch (e) { /* already finished */ } quipSource = null; }
+  }
+  function playQuipClip(text, delaySec) {
+    const buf = quipBuffers[text];
+    if (!actx || !buf) return false;
     try {
-      if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
-        const u = new window.SpeechSynthesisUtterance(" ");
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-      }
-    } catch (e) { /* ignore */ }
+      stopQuipClip();
+      const src = actx.createBufferSource();
+      src.buffer = buf;
+      src.connect(actx.destination);
+      src.onended = () => { if (quipSource === src) quipSource = null; };
+      quipSource = src;
+      src.start(actx.currentTime + (delaySec || 0));
+      return true;
+    } catch (e) { return false; }
+  }
+  function sayQuip(text, delayMs) {
+    if (!sfxOn) return;
+    if (playQuipClip(text, (delayMs || 0) / 1000)) return;
+    speak(text, delayMs);
   }
 
   // ---------- Helpers ----------
@@ -587,7 +647,6 @@
   $("start").addEventListener("click", () => {
     sfxOn = selectedSfx;
     sfxInit();
-    unlockSpeech();
     const allDecades = selectedDecade === "all";
     game = {
       allDecades,
@@ -853,7 +912,7 @@
     const tier = titleOk && artistOk ? "great" : (titleOk || artistOk ? "partial" : "miss");
     const quip = pickQuip(tier);
     $("quip").textContent = quip;
-    speak(quip, timedOut ? 900 : (tier === "great" ? 700 : 0)); // let the buzzer or chime finish first
+    sayQuip(quip, timedOut ? 900 : (tier === "great" ? 350 : 0)); // after the buzzer on time-up, just behind the chime on a perfect answer
 
     function mark(container, choices, pick) {
       [...container.children].forEach((b, i) => {
