@@ -75,7 +75,7 @@
 
   <section id="screen-start">
     <h1>Song Quiz</h1>
-    <p class="sub">Hear a 30-second clip, then name the song and the artist.</p>
+    <p class="sub">Hear a 12-second clip, then name the song and the artist.</p>
     <h2>Pick a decade</h2>
     <div id="decades" class="grid"></div>
     <h2>Number of rounds</h2>
@@ -139,6 +139,7 @@
   const BOTH_BASE = 40;
   const BOTH_STEP = 45;
   const BONUS_MULTIPLIER = 2.0;
+  const CLIP_SECONDS = 12; // how long each clip plays (same as the Windows version; Deezer's previews are 30 seconds)
 
   const $ = (id) => document.getElementById(id);
   const audio = $("audio");
@@ -147,6 +148,14 @@
     $("startStatus").textContent = "songs.js is missing. Upload it next to index.html.";
     return;
   }
+
+  // Stop each clip after CLIP_SECONDS
+  audio.addEventListener("timeupdate", () => {
+    if (audio.currentTime >= CLIP_SECONDS) {
+      audio.pause();
+      $("play").textContent = "Replay clip";
+    }
+  });
 
   // ---------- Helpers ----------
   function shuffle(arr) {
