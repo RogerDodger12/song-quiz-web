@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Song Quiz test</title>
+<meta name="theme-color" content="#14121f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Song Quiz">
+<title>Song Quiz</title>
 <style>
   :root {
     --bg: #14121f;
@@ -14,6 +17,7 @@
     --good: #3ecf8e;
     --bad: #ff6b6b;
     --line: #342e52;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body {
@@ -21,66 +25,130 @@
     background: var(--bg);
     color: var(--ink);
     font-family: Georgia, "Times New Roman", serif;
-    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
   }
   main { max-width: 480px; margin: 0 auto; }
-  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
-  p.sub { color: var(--muted); margin: 0 0 18px; font-size: .95rem; }
-  .row { display: flex; gap: 8px; margin-bottom: 14px; }
-  input {
-    flex: 1; min-width: 0; padding: 12px; font-size: 1rem;
-    background: var(--panel); color: var(--ink);
-    border: 1px solid var(--line); border-radius: 8px;
-  }
+  h1 { font-size: 2rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.05rem; margin: 22px 0 8px; color: var(--muted); font-weight: normal; }
+  p.sub { color: var(--muted); margin: 0 0 6px; }
   button {
-    font: inherit; font-size: 1rem; cursor: pointer;
-    padding: 14px 16px; border-radius: 8px;
+    font: inherit; font-size: 1rem; cursor: pointer; min-height: 48px;
+    padding: 12px 16px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--panel); color: var(--ink);
   }
-  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: default; }
   button.primary { background: var(--accent); color: #2a1a00; border-color: var(--accent); font-weight: bold; }
-  button:disabled { opacity: .5; cursor: default; }
-  #play { width: 100%; padding: 22px; font-size: 1.2rem; margin-bottom: 14px; }
-  #choices { display: grid; gap: 10px; }
-  #choices button { text-align: left; line-height: 1.3; }
-  #choices button.good { background: var(--good); color: #052e1a; border-color: var(--good); }
-  #choices button.bad { background: var(--bad); color: #3a0a0a; border-color: var(--bad); }
-  #status { color: var(--muted); min-height: 1.4em; margin: 12px 0; font-size: .95rem; }
-  #next { width: 100%; margin-top: 12px; }
+  button.big { width: 100%; padding: 18px; font-size: 1.15rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .seg { display: flex; gap: 10px; }
+  .seg button { flex: 1; }
+  button.selected { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+  .topbar { display: flex; justify-content: space-between; color: var(--muted); margin-bottom: 10px; }
+  #bonus {
+    background: var(--accent); color: #2a1a00; font-weight: bold;
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; text-align: center;
+  }
+  #status { color: var(--muted); min-height: 1.4em; margin: 10px 0 0; }
+  .choices { display: grid; gap: 8px; }
+  .choices button { text-align: left; line-height: 1.3; }
+  .choices button.picked { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+  .choices button.good { background: var(--good); color: #052e1a; border-color: var(--good); box-shadow: none; }
+  .choices button.bad { background: var(--bad); color: #3a0a0a; border-color: var(--bad); box-shadow: none; }
+  #check { margin-top: 18px; }
+  #reveal { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  #reveal .row { display: flex; gap: 14px; align-items: center; }
+  #cover { width: 84px; height: 84px; border-radius: 6px; flex: none; background: var(--line); }
+  #answerLine { font-weight: bold; margin: 0 0 4px; }
+  #resultLine { margin: 0; color: var(--muted); }
+  #next { margin-top: 14px; }
+  .final { text-align: center; padding-top: 20px; }
+  .final .score { font-size: 3.4rem; margin: 8px 0 0; color: var(--accent); }
+  .final .of { color: var(--muted); margin: 0 0 6px; }
+  .final .rank { font-size: 1.4rem; margin: 10px 0 24px; }
+  .final button { margin-bottom: 10px; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Song Quiz: web test</h1>
-  <p class="sub">Search for an artist or style, then tap to hear a clip and pick the song.</p>
 
-  <div class="row">
-    <input id="query" value="queen" aria-label="Search term" autocapitalize="none" autocorrect="off">
-    <button id="load" class="primary">Load songs</button>
-  </div>
+  <section id="screen-start">
+    <h1>Song Quiz</h1>
+    <p class="sub">Hear a 30-second clip, then name the song and the artist.</p>
+    <h2>Pick a decade</h2>
+    <div id="decades" class="grid"></div>
+    <h2>Number of rounds</h2>
+    <div id="rounds" class="seg"></div>
+    <div style="margin-top:24px">
+      <button id="start" class="primary big" disabled>Start game</button>
+    </div>
+    <p id="startStatus" class="sub" style="margin-top:12px"></p>
+  </section>
 
-  <div id="status">Ready.</div>
+  <section id="screen-game" hidden>
+    <div class="topbar"><span id="roundLabel"></span><span id="scoreLabel"></span></div>
+    <div id="bonus" hidden></div>
+    <button id="play" class="big">Play clip</button>
+    <p id="status"></p>
+    <button id="retry" class="big" hidden>Try again</button>
 
-  <div id="game" hidden>
-    <button id="play">Play clip</button>
-    <div id="choices"></div>
-    <button id="next" class="primary" hidden>Next song</button>
-  </div>
+    <div id="questions">
+      <h2>Song title</h2>
+      <div id="titleChoices" class="choices"></div>
+      <h2>Artist</h2>
+      <div id="artistChoices" class="choices"></div>
+      <button id="check" class="primary big" disabled>Check answers</button>
+    </div>
 
-  <audio id="audio" preload="none"></audio>
+    <div id="reveal" hidden>
+      <div class="row">
+        <img id="cover" alt="" hidden>
+        <div>
+          <p id="answerLine"></p>
+          <p id="resultLine"></p>
+        </div>
+      </div>
+      <button id="next" class="primary big">Next song</button>
+    </div>
+  </section>
+
+  <section id="screen-end" class="final" hidden>
+    <h1>Game over</h1>
+    <p id="finalScore" class="score"></p>
+    <p id="finalOf" class="of"></p>
+    <p id="finalRank" class="rank"></p>
+    <button id="share" class="big">Share my score</button>
+    <button id="again" class="primary big">Play again</button>
+    <p id="shareStatus" class="sub"></p>
+  </section>
+
+  <audio id="audio" preload="auto"></audio>
 </main>
 
+<script src="songs.js"></script>
 <script>
-  // Your Cloudflare Worker proxy
+(function () {
+  // Your Cloudflare Worker proxy for Deezer
   const PROXY = "https://deezer-proxy.obrienmd2.workers.dev";
+
+  // Same numbers as the Windows version
+  const ROUND_OPTIONS = [5, 7, 10];
+  const DEFAULT_ROUNDS = 7;
+  const STEP = 15;
+  const BOTH_BASE = 40;
+  const BOTH_STEP = 45;
+  const BONUS_MULTIPLIER = 2.0;
 
   const $ = (id) => document.getElementById(id);
   const audio = $("audio");
-  let pool = [];
 
-  function setStatus(msg) { $("status").textContent = msg; }
+  if (typeof DECADES === "undefined") {
+    $("startStatus").textContent = "songs.js is missing. Upload it next to index.html.";
+    return;
+  }
 
+  // ---------- Helpers ----------
   function shuffle(arr) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -89,77 +157,321 @@
     }
     return a;
   }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  async function loadSongs() {
-    const q = $("query").value.trim();
-    if (!q) { setStatus("Type something to search for."); return; }
-    setStatus("Loading songs...");
-    $("game").hidden = true;
-    try {
-      const res = await fetch(`${PROXY}/search?q=${encodeURIComponent(q)}&limit=50`);
-      if (!res.ok) throw new Error("Proxy returned " + res.status);
-      const json = await res.json();
-      pool = (json.data || []).filter((t) => t.preview && t.title && t.artist);
-      if (pool.length < 4) {
-        setStatus("Not enough songs with clips for that search. Try another term.");
-        return;
-      }
-      setStatus(`Loaded ${pool.length} songs with clips.`);
-      $("game").hidden = false;
-      newRound();
-    } catch (err) {
-      setStatus("Could not load songs: " + err.message);
+  function norm(text) {
+    text = text.replace(/\(.*?\)|\[.*?\]/g, " ");
+    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().replace(/'/g, "").replace(/\u2019/g, "").replace(/&/g, " and ");
+    return text.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  }
+  const stripParens = (t) => t.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  const titleMatches = (have, want) => have === want || have.startsWith(want + " ");
+  const artistMatches = (have, want) =>
+    have.length > 0 && (have.includes(want) || want.includes(have));
+
+  // Skip live, remix, karaoke, tribute versions and live/tribute albums
+  const UNWANTED_VERSION = /\b(live|re-?recorded|remix|karaoke|instrumental|acoustic|demo|cover|tribute|8-bit)\b/i;
+  const UNWANTED_ALBUM = /\b(live|concerts?|unplugged|bbc|sessions|royal albert hall|philharmonic|las vegas|sands|cast recording|broadway|tribute|karaoke|re-?recorded|reunion|duets|celebrates|remix(?:es|ed)?|mixes|taylor.s version|songs of surrender|\d{4} version|nighttime version|on tour|last time out|mix|megamix|reworked|originally performed|malibu)\b/i;
+
+  // ---------- Scoring ----------
+  function points(round, titleOk, artistOk, total) {
+    let base = 0;
+    if (titleOk && artistOk) base = BOTH_BASE + BOTH_STEP * (round - 1);
+    else if (titleOk || artistOk) base = STEP * round;
+    return round === total ? Math.trunc(base * BONUS_MULTIPLIER) : base;
+  }
+  function maxScore(total) {
+    let sum = 0;
+    for (let r = 1; r <= total; r++) sum += points(r, true, true, total);
+    return sum;
+  }
+  function rankFor(score, total) {
+    const pct = score / maxScore(total);
+    if (pct >= 0.9) return "Certified Jukebox";
+    if (pct >= 0.7) return "Radio Regular";
+    if (pct >= 0.45) return "Car Singer";
+    if (pct >= 0.2) return "Shower Singer";
+    return "Background Noise";
+  }
+
+  // ---------- Deezer lookups (through the proxy) ----------
+  async function getJson(path) {
+    const res = await fetch(PROXY + path);
+    if (!res.ok) throw new Error("Proxy returned " + res.status);
+    const json = await res.json();
+    if (json.error) throw new Error("Deezer returned an error");
+    return json;
+  }
+
+  function pickBestMatch(json, song) {
+    const wantTitle = norm(song.title);
+    const wantArtist = norm(song.artist);
+    for (const item of json.data || []) {
+      if (!item.preview) continue;
+      const title = item.title || "";
+      if (UNWANTED_VERSION.test(title)) continue;
+      if (!titleMatches(norm(title), wantTitle)) continue;
+      const artist = item.artist && item.artist.name ? item.artist.name : "";
+      if (!artistMatches(norm(artist), wantArtist)) continue;
+      const albumTitle = item.album && item.album.title ? item.album.title : "";
+      if (UNWANTED_ALBUM.test(albumTitle)) continue;
+      return {
+        id: item.id,
+        title: song.title,
+        artist: song.artist,
+        year: song.year,
+        preview: item.preview,
+        cover: item.album && item.album.cover_medium ? item.album.cover_medium : null,
+      };
     }
+    return null;
   }
 
-  let correctId = null;
-  let answered = false;
+  const resolved = new Map(); // song key -> track or null
+  async function resolveSong(song) {
+    const key = song.title + "|" + song.artist;
+    if (resolved.has(key)) return resolved.get(key);
+    const q = stripParens(song.title) + " " + song.artist;
+    const json = await getJson("/search/track?q=" + encodeURIComponent(q) + "&limit=25");
+    const track = pickBestMatch(json, song);
+    resolved.set(key, track);
+    return track;
+  }
 
-  function newRound() {
-    answered = false;
-    audio.pause();
-    $("next").hidden = true;
-    const picks = shuffle(pool).slice(0, 4);
-    const answer = picks[Math.floor(Math.random() * 4)];
-    correctId = answer.id;
-    // Fresh preview link each round (they expire)
-    audio.src = answer.preview;
-    $("play").textContent = "Play clip";
+  // ---------- Game state ----------
+  let selectedDecade = null;
+  let selectedRounds = DEFAULT_ROUNDS;
+  let game = null;
+  let cur = null;
 
-    const box = $("choices");
-    box.innerHTML = "";
-    picks.forEach((t) => {
+  async function findTrack() {
+    let failures = 0;
+    while (game.queue.length) {
+      const song = game.queue.pop();
+      try {
+        const track = await resolveSong(song);
+        failures = 0;
+        if (track && !game.used.has(track.id)) {
+          game.used.add(track.id);
+          return track;
+        }
+      } catch (err) {
+        if (++failures >= 3) throw err;
+        await sleep(1000);
+      }
+    }
+    return null;
+  }
+  async function fetchTrack() {
+    try { return { track: await findTrack() }; }
+    catch (error) { return { error }; }
+  }
+
+  // ---------- Screens ----------
+  function show(name) {
+    $("screen-start").hidden = name !== "start";
+    $("screen-game").hidden = name !== "game";
+    $("screen-end").hidden = name !== "end";
+    window.scrollTo(0, 0);
+  }
+
+  // Start screen
+  DECADES.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.textContent = d.name;
+    b.addEventListener("click", () => {
+      selectedDecade = i;
+      [...$("decades").children].forEach((c) => c.classList.toggle("selected", c === b));
+      $("start").disabled = false;
+    });
+    $("decades").appendChild(b);
+  });
+  ROUND_OPTIONS.forEach((n) => {
+    const b = document.createElement("button");
+    b.textContent = n;
+    if (n === DEFAULT_ROUNDS) b.classList.add("selected");
+    b.addEventListener("click", () => {
+      selectedRounds = n;
+      [...$("rounds").children].forEach((c) => c.classList.toggle("selected", c === b));
+    });
+    $("rounds").appendChild(b);
+  });
+
+  $("start").addEventListener("click", () => {
+    if (selectedDecade === null) return;
+    const decade = DECADES[selectedDecade];
+    game = {
+      decade,
+      total: selectedRounds,
+      round: 0,
+      score: 0,
+      used: new Set(),
+      queue: shuffle(decade.songs),
+      pending: null,
+    };
+    show("game");
+    nextRound();
+  });
+
+  // ---------- A round ----------
+  function setStatus(msg) { $("status").textContent = msg; }
+
+  function makeChoices(track, decade) {
+    const songs = decade.songs;
+    const wantT = norm(track.title);
+    const wantA = norm(track.artist);
+    const titles = [...new Map(songs.map((s) => [norm(s.title), s.title])).entries()]
+      .filter(([k]) => k && k !== wantT).map(([, v]) => v);
+    const artists = [...new Map(songs.map((s) => [norm(s.artist), s.artist])).entries()]
+      .filter(([k]) => k && !artistMatches(k, wantA)).map(([, v]) => v);
+    return {
+      titles: shuffle([{ text: track.title, correct: true },
+        ...shuffle(titles).slice(0, 3).map((t) => ({ text: t, correct: false }))]),
+      artists: shuffle([{ text: track.artist, correct: true },
+        ...shuffle(artists).slice(0, 3).map((t) => ({ text: t, correct: false }))]),
+    };
+  }
+
+  function renderChoices(container, choices, key) {
+    container.innerHTML = "";
+    choices.forEach((c, i) => {
       const b = document.createElement("button");
-      b.textContent = `${t.title_short || t.title} \u2013 ${t.artist.name}`;
-      b.dataset.id = t.id;
-      b.addEventListener("click", () => choose(b));
-      box.appendChild(b);
+      b.textContent = c.text;
+      b.addEventListener("click", () => {
+        if (cur.checked) return;
+        cur[key] = i;
+        [...container.children].forEach((x, j) => x.classList.toggle("picked", j === i));
+        $("check").disabled = cur.titlePick === null || cur.artistPick === null;
+      });
+      container.appendChild(b);
     });
   }
 
-  function choose(btn) {
-    if (answered) return;
-    answered = true;
+  async function nextRound() {
     audio.pause();
-    [...$("choices").children].forEach((b) => {
-      if (b.dataset.id == correctId) b.classList.add("good");
-    });
-    if (btn.dataset.id != correctId) btn.classList.add("bad");
-    $("next").hidden = false;
+    game.round++;
+    $("reveal").hidden = true;
+    $("retry").hidden = true;
+    $("questions").hidden = true;
+    $("play").disabled = true;
+    $("play").textContent = "Play clip";
+    $("roundLabel").textContent = "Song " + game.round + " of " + game.total;
+    $("scoreLabel").textContent = "Score: " + game.score;
+    const isBonus = game.round === game.total;
+    $("bonus").hidden = !isBonus;
+    if (isBonus) $("bonus").textContent = "Bonus round: points count x" + BONUS_MULTIPLIER;
+    setStatus("Finding a song...");
+
+    const result = game.pending ? await game.pending : await fetchTrack();
+    game.pending = null;
+
+    if (result.error) {
+      setStatus("Could not load a song: " + result.error.message);
+      $("retry").hidden = false;
+      return;
+    }
+    if (!result.track) { endGame(); return; }
+
+    const track = result.track;
+    const choices = makeChoices(track, game.decade);
+    cur = { track, choices, titlePick: null, artistPick: null, checked: false };
+    renderChoices($("titleChoices"), choices.titles, "titlePick");
+    renderChoices($("artistChoices"), choices.artists, "artistPick");
+    $("check").disabled = true;
+    $("questions").hidden = false;
+    setStatus("");
+
+    audio.src = track.preview;
+    $("play").disabled = false;
+    audio.play().then(
+      () => { $("play").textContent = "Replay clip"; },
+      () => { /* iPhone needs a tap first: the Play clip button handles it */ }
+    );
+
+    // Look up the next song while the player is listening
+    if (game.round < game.total) game.pending = fetchTrack();
   }
 
-  // iPhone requires a tap to start audio, so playback starts from this button.
+  $("retry").addEventListener("click", () => {
+    game.round--;
+    nextRound();
+  });
+
   $("play").addEventListener("click", () => {
     audio.currentTime = 0;
     audio.play().then(
-      () => { $("play").textContent = "Play again"; },
+      () => { $("play").textContent = "Replay clip"; },
       (err) => setStatus("Could not play the clip: " + err.message)
     );
   });
 
-  $("load").addEventListener("click", loadSongs);
-  $("query").addEventListener("keydown", (e) => { if (e.key === "Enter") loadSongs(); });
-  $("next").addEventListener("click", newRound);
+  $("check").addEventListener("click", () => {
+    if (cur.checked || cur.titlePick === null || cur.artistPick === null) return;
+    cur.checked = true;
+    const titleOk = cur.choices.titles[cur.titlePick].correct;
+    const artistOk = cur.choices.artists[cur.artistPick].correct;
+    const earned = points(game.round, titleOk, artistOk, game.total);
+    game.score += earned;
+    $("scoreLabel").textContent = "Score: " + game.score;
+
+    function mark(container, choices, pick) {
+      [...container.children].forEach((b, i) => {
+        b.classList.remove("picked");
+        if (choices[i].correct) b.classList.add("good");
+        else if (i === pick) b.classList.add("bad");
+      });
+    }
+    mark($("titleChoices"), cur.choices.titles, cur.titlePick);
+    mark($("artistChoices"), cur.choices.artists, cur.artistPick);
+    $("check").disabled = true;
+
+    const t = cur.track;
+    $("answerLine").textContent = t.title + " \u2013 " + t.artist + " (" + t.year + ")";
+    let verdict = "Missed this one.";
+    if (titleOk && artistOk) verdict = "Title and artist both right!";
+    else if (titleOk) verdict = "You got the title.";
+    else if (artistOk) verdict = "You got the artist.";
+    $("resultLine").textContent = verdict + " +" + earned + " points";
+    const cover = $("cover");
+    if (t.cover) { cover.src = t.cover; cover.hidden = false; } else { cover.hidden = true; }
+    $("next").textContent = game.round < game.total ? "Next song" : "See results";
+    $("reveal").hidden = false;
+    $("reveal").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  $("next").addEventListener("click", () => {
+    if (game.round >= game.total) endGame();
+    else nextRound();
+  });
+
+  // ---------- End ----------
+  function endGame() {
+    audio.pause();
+    $("finalScore").textContent = game.score;
+    $("finalOf").textContent = "out of " + maxScore(game.total) + " possible (" + game.decade.name + ")";
+    $("finalRank").textContent = rankFor(game.score, game.total);
+    $("shareStatus").textContent = "";
+    show("end");
+  }
+
+  $("share").addEventListener("click", () => {
+    const text = "I scored " + game.score + " in Song Quiz (" + game.decade.name + "). Can you beat it?";
+    const url = location.href.split("#")[0];
+    if (navigator.share) {
+      navigator.share({ text, url }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(text + " " + url).then(
+        () => { $("shareStatus").textContent = "Copied. Paste it in a message."; },
+        () => { $("shareStatus").textContent = "Could not copy. " + text; }
+      );
+    } else {
+      $("shareStatus").textContent = text;
+    }
+  });
+
+  $("again").addEventListener("click", () => show("start"));
+})();
 </script>
 </body>
 </html>
