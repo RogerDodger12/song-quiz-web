@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Song Quiz test</title>
+<style>
+  :root {
+    --bg: #14121f;
+    --panel: #1f1b33;
+    --ink: #f4f1fa;
+    --muted: #a9a3c2;
+    --accent: #ffb347;
+    --good: #3ecf8e;
+    --bad: #ff6b6b;
+    --line: #342e52;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 18px; font-size: .95rem; }
+  .row { display: flex; gap: 8px; margin-bottom: 14px; }
+  input {
+    flex: 1; min-width: 0; padding: 12px; font-size: 1rem;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  button {
+    font: inherit; font-size: 1rem; cursor: pointer;
+    padding: 14px 16px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: #2a1a00; border-color: var(--accent); font-weight: bold; }
+  button:disabled { opacity: .5; cursor: default; }
+  #play { width: 100%; padding: 22px; font-size: 1.2rem; margin-bottom: 14px; }
+  #choices { display: grid; gap: 10px; }
+  #choices button { text-align: left; line-height: 1.3; }
+  #choices button.good { background: var(--good); color: #052e1a; border-color: var(--good); }
+  #choices button.bad { background: var(--bad); color: #3a0a0a; border-color: var(--bad); }
+  #status { color: var(--muted); min-height: 1.4em; margin: 12px 0; font-size: .95rem; }
+  #next { width: 100%; margin-top: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Song Quiz: web test</h1>
+  <p class="sub">Search for an artist or style, then tap to hear a clip and pick the song.</p>
+
+  <div class="row">
+    <input id="query" value="queen" aria-label="Search term" autocapitalize="none" autocorrect="off">
+    <button id="load" class="primary">Load songs</button>
+  </div>
+
+  <div id="status">Ready.</div>
+
+  <div id="game" hidden>
+    <button id="play">Play clip</button>
+    <div id="choices"></div>
+    <button id="next" class="primary" hidden>Next song</button>
+  </div>
+
+  <audio id="audio" preload="none"></audio>
+</main>
+
+<script>
+  // Your Cloudflare Worker proxy
+  const PROXY = "https://deezer-proxy.obrienmd2.workers.dev";
+
+  const $ = (id) => document.getElementById(id);
+  const audio = $("audio");
+  let pool = [];
+
+  function setStatus(msg) { $("status").textContent = msg; }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  async function loadSongs() {
+    const q = $("query").value.trim();
+    if (!q) { setStatus("Type something to search for."); return; }
+    setStatus("Loading songs...");
+    $("game").hidden = true;
+    try {
+      const res = await fetch(`${PROXY}/search?q=${encodeURIComponent(q)}&limit=50`);
+      if (!res.ok) throw new Error("Proxy returned " + res.status);
+      const json = await res.json();
+      pool = (json.data || []).filter((t) => t.preview && t.title && t.artist);
+      if (pool.length < 4) {
+        setStatus("Not enough songs with clips for that search. Try another term.");
+        return;
+      }
+      setStatus(`Loaded ${pool.length} songs with clips.`);
+      $("game").hidden = false;
+      newRound();
+    } catch (err) {
+      setStatus("Could not load songs: " + err.message);
+    }
+  }
+
+  let correctId = null;
+  let answered = false;
+
+  function newRound() {
+    answered = false;
+    audio.pause();
+    $("next").hidden = true;
+    const picks = shuffle(pool).slice(0, 4);
+    const answer = picks[Math.floor(Math.random() * 4)];
+    correctId = answer.id;
+    // Fresh preview link each round (they expire)
+    audio.src = answer.preview;
+    $("play").textContent = "Play clip";
+
+    const box = $("choices");
+    box.innerHTML = "";
+    picks.forEach((t) => {
+      const b = document.createElement("button");
+      b.textContent = `${t.title_short || t.title} \u2013 ${t.artist.name}`;
+      b.dataset.id = t.id;
+      b.addEventListener("click", () => choose(b));
+      box.appendChild(b);
+    });
+  }
+
+  function choose(btn) {
+    if (answered) return;
+    answered = true;
+    audio.pause();
+    [...$("choices").children].forEach((b) => {
+      if (b.dataset.id == correctId) b.classList.add("good");
+    });
+    if (btn.dataset.id != correctId) btn.classList.add("bad");
+    $("next").hidden = false;
+  }
+
+  // iPhone requires a tap to start audio, so playback starts from this button.
+  $("play").addEventListener("click", () => {
+    audio.currentTime = 0;
+    audio.play().then(
+      () => { $("play").textContent = "Play again"; },
+      (err) => setStatus("Could not play the clip: " + err.message)
+    );
+  });
+
+  $("load").addEventListener("click", loadSongs);
+  $("query").addEventListener("keydown", (e) => { if (e.key === "Enter") loadSongs(); });
+  $("next").addEventListener("click", newRound);
+</script>
+</body>
+</html>
