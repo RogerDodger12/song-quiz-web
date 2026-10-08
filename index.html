@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14121f">
+<meta name="theme-color" content="#1E0E32">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Song Quiz">
-<title>Song Quiz</title>
+<meta name="apple-mobile-web-app-title" content="Music Trivia">
+<title>Music Trivia</title>
 <style>
   :root {
-    --bg: #14121f;
-    --panel: #1f1b33;
-    --ink: #f4f1fa;
-    --muted: #a9a3c2;
-    --accent: #ffb347;
-    --good: #3ecf8e;
-    --bad: #ff6b6b;
-    --line: #342e52;
+    --bg: #1E0E32;        /* plum */
+    --panel: #2C1646;     /* card */
+    --ink: #FFF4E0;       /* cream */
+    --muted: #CBB8E6;     /* lavender */
+    --accent: #FFC53D;    /* gold */
+    --good: #5CE1E6;      /* cyan */
+    --bad: #FF4F8B;       /* pink */
+    --line: #4B2A72;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -24,16 +24,17 @@
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
     padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
   }
+  .display, h1, #timer { font-family: Bahnschrift, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
   main { max-width: 480px; margin: 0 auto; }
-  h1 { font-size: 2rem; margin: 8px 0 4px; }
+  h1 { font-size: 2.2rem; margin: 8px 0 4px; }
   h2 { font-size: 1.05rem; margin: 22px 0 8px; color: var(--muted); font-weight: normal; }
   p.sub { color: var(--muted); margin: 0 0 6px; }
   button {
     font: inherit; font-size: 1rem; cursor: pointer; min-height: 48px;
-    padding: 12px 16px; border-radius: 8px;
+    padding: 12px 16px; border-radius: 10px;
     border: 1px solid var(--line); background: var(--panel); color: var(--ink);
   }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -41,32 +42,69 @@
   button.primary { background: var(--accent); color: #2a1a00; border-color: var(--accent); font-weight: bold; }
   button.big { width: 100%; padding: 18px; font-size: 1.15rem; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid .wide { grid-column: 1 / -1; }
   .seg { display: flex; gap: 10px; }
   .seg button { flex: 1; }
   button.selected { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
-  .topbar { display: flex; justify-content: space-between; color: var(--muted); margin-bottom: 10px; }
+
+  .topbar { margin-bottom: 6px; }
+  #roundLabel { color: var(--muted); }
+  #roundLabel.bonusOn { color: var(--accent); font-weight: bold; }
+  #scoreLabel { font-weight: 600; font-size: 1.15rem; margin-top: 2px; }
+  .turn { margin: 4px 0 8px; font-size: 1.3rem; font-weight: bold; color: var(--accent); }
   #bonus {
     background: var(--accent); color: #2a1a00; font-weight: bold;
-    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; text-align: center;
+    padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; text-align: center;
   }
-  #status { color: var(--muted); min-height: 1.4em; margin: 10px 0 0; }
+
+  .stage {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--line); margin-bottom: 12px;
+  }
+  .disc {
+    width: 64px; height: 64px; border-radius: 50%; flex: none; position: relative;
+    background: repeating-radial-gradient(circle at center, #2a1442 0 2px, #12081f 2px 4px);
+    border: 2px solid var(--line);
+    animation: spin 2.4s linear infinite; animation-play-state: paused;
+  }
+  .disc.spinning { animation-play-state: running; }
+  .disc::after { content: ""; position: absolute; inset: 21px; border-radius: 50%; background: var(--accent); }
+  .disc::before { content: ""; position: absolute; left: 50%; top: 3px; width: 3px; height: 10px; margin-left: -1px; background: var(--ink); opacity: .7; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .disc { animation: none; } }
+  #timer { font-size: 2.6rem; min-width: 2.2ch; text-align: center; color: var(--accent); font-variant-numeric: tabular-nums; }
+  #status { flex: 1; color: var(--muted); margin: 0; min-height: 1.4em; }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+  .tools button { flex: 1 1 auto; }
+  .tools button.big { flex-basis: 100%; }
+
   .choices { display: grid; gap: 8px; }
   .choices button { text-align: left; line-height: 1.3; }
   .choices button.picked { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
-  .choices button.good { background: var(--good); color: #052e1a; border-color: var(--good); box-shadow: none; }
-  .choices button.bad { background: var(--bad); color: #3a0a0a; border-color: var(--bad); box-shadow: none; }
+  .choices button.good { background: var(--good); color: #062b2d; border-color: var(--good); box-shadow: none; }
+  .choices button.bad { background: var(--bad); color: #3a0519; border-color: var(--bad); box-shadow: none; }
   #check { margin-top: 18px; }
-  #reveal { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  #reveal { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   #reveal .row { display: flex; gap: 14px; align-items: center; }
   #cover { width: 84px; height: 84px; border-radius: 6px; flex: none; background: var(--line); }
   #answerLine { font-weight: bold; margin: 0 0 4px; }
   #resultLine { margin: 0; color: var(--muted); }
   #next { margin-top: 14px; }
+  .footer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 28px; }
+
   .final { text-align: center; padding-top: 20px; }
-  .final .score { font-size: 3.4rem; margin: 8px 0 0; color: var(--accent); }
-  .final .of { color: var(--muted); margin: 0 0 6px; }
-  .final .rank { font-size: 1.4rem; margin: 10px 0 24px; }
+  .final .score { font-size: 2.2rem; margin: 8px 0 0; color: var(--accent); white-space: pre-line; line-height: 1.25; font-weight: bold; }
+  .final .rank { font-size: 1.6rem; font-weight: bold; margin: 12px 0 24px; }
   .final button { margin-bottom: 10px; }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; background: rgba(30, 14, 50, .96);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .overlay > div { width: 100%; max-width: 360px; text-align: center; }
+  .overlay .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -74,12 +112,16 @@
 <main>
 
   <section id="screen-start">
-    <h1>Song Quiz</h1>
-    <p class="sub">Hear a 12-second clip, then name the song and the artist.</p>
+    <h1>Music Trivia</h1>
+    <p class="sub">Name that tune!</p>
+    <h2>How many teams?</h2>
+    <div id="teams" class="seg"></div>
+    <h2>How many rounds?</h2>
+    <div id="rounds" class="seg"></div>
     <h2>Pick a decade</h2>
     <div id="decades" class="grid"></div>
-    <h2>Number of rounds</h2>
-    <div id="rounds" class="seg"></div>
+    <h2>Sound effects</h2>
+    <div id="sfx" class="seg"></div>
     <div style="margin-top:24px">
       <button id="start" class="primary big" disabled>Start game</button>
     </div>
@@ -87,13 +129,27 @@
   </section>
 
   <section id="screen-game" hidden>
-    <div class="topbar"><span id="roundLabel"></span><span id="scoreLabel"></span></div>
+    <div class="topbar">
+      <div id="roundLabel"></div>
+      <div id="scoreLabel"></div>
+    </div>
+    <p id="turnLabel" class="turn" hidden></p>
     <div id="bonus" hidden></div>
-    <button id="play" class="big">Play clip</button>
-    <p id="status"></p>
-    <button id="retry" class="big" hidden>Try again</button>
 
-    <div id="questions">
+    <div class="stage">
+      <div id="disc" class="disc"></div>
+      <div id="timer"></div>
+      <p id="status"></p>
+    </div>
+
+    <div class="tools">
+      <button id="tapPlay" class="primary big" hidden>Tap to hear the clip</button>
+      <button id="repeat" hidden></button>
+      <button id="swap" hidden>Skip this song</button>
+      <button id="retry" class="primary" hidden>Try again</button>
+    </div>
+
+    <div id="questions" hidden>
       <h2>Song title</h2>
       <div id="titleChoices" class="choices"></div>
       <h2>Artist</h2>
@@ -109,19 +165,42 @@
           <p id="resultLine"></p>
         </div>
       </div>
-      <button id="next" class="primary big">Next song</button>
+      <button id="next" class="primary big">Next</button>
+    </div>
+
+    <div class="footer">
+      <button id="pause" disabled>Pause</button>
+      <button id="newgame">New Game</button>
     </div>
   </section>
 
   <section id="screen-end" class="final" hidden>
-    <h1>Game over</h1>
+    <h1>Game over!</h1>
     <p id="finalScore" class="score"></p>
-    <p id="finalOf" class="of"></p>
     <p id="finalRank" class="rank"></p>
     <button id="share" class="big">Share my score</button>
     <button id="again" class="primary big">Play again</button>
     <p id="shareStatus" class="sub"></p>
   </section>
+
+  <div id="pauseOverlay" class="overlay" hidden>
+    <div>
+      <h1>Paused</h1>
+      <p class="sub">The music and the clock are on hold.</p>
+      <button id="resume" class="primary big" style="margin-top:18px">Resume</button>
+    </div>
+  </div>
+
+  <div id="confirmOverlay" class="overlay" hidden>
+    <div>
+      <h1>Start a new game?</h1>
+      <p class="sub">The scores will be cleared. The music and the clock are paused until you decide.</p>
+      <div class="two">
+        <button id="keepPlaying">Keep playing</button>
+        <button id="startOver" class="primary">Start over</button>
+      </div>
+    </div>
+  </div>
 
   <audio id="audio" preload="auto"></audio>
 </main>
@@ -135,11 +214,17 @@
   // Same numbers as the Windows version
   const ROUND_OPTIONS = [5, 7, 10];
   const DEFAULT_ROUNDS = 7;
+  const TEAM_OPTIONS = [1, 2, 3, 4];
+  const DEFAULT_TEAMS = 2;
   const STEP = 15;
   const BOTH_BASE = 40;
   const BOTH_STEP = 45;
   const BONUS_MULTIPLIER = 2.0;
-  const CLIP_SECONDS = 12; // how long each clip plays (same as the Windows version; Deezer's previews are 30 seconds)
+  const CLIP_SECONDS = 12;        // how long the song plays
+  const GUESS_SECONDS = 15;       // how long to answer after the clip
+  const MAX_REPEATS = 3;          // replays allowed per song
+  const MAX_LOAD_ATTEMPTS = 3;    // clips that may fail to play in a row
+  const TICK_FROM_SECOND = 3;     // the countdown ticks for the last few seconds
 
   const $ = (id) => document.getElementById(id);
   const audio = $("audio");
@@ -149,13 +234,80 @@
     return;
   }
 
-  // Stop each clip after CLIP_SECONDS
-  audio.addEventListener("timeupdate", () => {
-    if (audio.currentTime >= CLIP_SECONDS) {
-      audio.pause();
-      $("play").textContent = "Replay clip";
+  // ---------- Sound effects (the same sounds the Windows version generates) ----------
+  let sfxOn = true;
+  let actx = null;
+  const sfxBuffers = {};
+  const activeSfx = new Set();
+
+  function makeBuffer(seconds, level) {
+    const sr = actx.sampleRate;
+    const n = Math.floor(sr * seconds);
+    const buf = actx.createBuffer(1, n, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const endFade = Math.min(1.0, (seconds - t) / 0.02); // no click at the very end
+      d[i] = Math.max(-1, Math.min(1, level(t) * endFade));
     }
-  });
+    return buf;
+  }
+  function buildSfx() {
+    // A short, harsh game-show buzzer
+    sfxBuffers.buzzer = makeBuffer(0.9, (t) => {
+      const wave = (Math.sign(Math.sin(2 * Math.PI * 150 * t)) +
+                    Math.sign(Math.sin(2 * Math.PI * 157 * t))) / 2.0;
+      const fadeIn = Math.min(1.0, t / 0.01);
+      const fadeOut = Math.min(1.0, (0.9 - t) / 0.12);
+      return wave * fadeIn * fadeOut * 0.45;
+    });
+    // A soft, short click for the last seconds of the countdown
+    sfxBuffers.tick = makeBuffer(0.07, (t) =>
+      Math.sin(2 * Math.PI * 1200 * t) * Math.exp(-t * 80) * 0.55);
+    // Four quick rising notes (C, E, G, high C): a little "ta-da"
+    const pitch = [523.25, 659.25, 783.99, 1046.50];
+    const start = [0.00, 0.11, 0.22, 0.33];
+    sfxBuffers.win = makeBuffer(1.1, (t) => {
+      let sum = 0;
+      for (let i = 0; i < pitch.length; i++) {
+        const n = t - start[i];
+        if (n < 0) continue;
+        const env = Math.min(1.0, n / 0.005) * Math.exp(-n * (i === pitch.length - 1 ? 4.0 : 9.0));
+        const tone = Math.sin(2 * Math.PI * pitch[i] * n) + 0.35 * Math.sin(2 * Math.PI * pitch[i] * 2 * n);
+        sum += tone * env;
+      }
+      return sum * 0.22;
+    });
+  }
+  function sfxInit() {
+    try {
+      if (!actx) {
+        const C = window.AudioContext || window.webkitAudioContext;
+        if (C) { actx = new C(); buildSfx(); }
+      }
+      if (actx && actx.state === "suspended") actx.resume();
+    } catch (e) { /* sound is a nice extra: never let it get in the way */ }
+  }
+  function playSfx(name) {
+    if (!sfxOn || !actx || !sfxBuffers[name]) return;
+    try {
+      const src = actx.createBufferSource();
+      src.buffer = sfxBuffers[name];
+      src.connect(actx.destination);
+      src.onended = () => activeSfx.delete(src);
+      activeSfx.add(src);
+      src.start();
+    } catch (e) { /* ignore */ }
+  }
+  function stopSfx() {
+    activeSfx.forEach((s) => { try { s.stop(); } catch (e) { /* already stopped */ } });
+    activeSfx.clear();
+  }
+  const sfx = {
+    tick: () => playSfx("tick"),
+    buzzer: () => playSfx("buzzer"),
+    win: () => playSfx("win"),
+  };
 
   // ---------- Helpers ----------
   function shuffle(arr) {
@@ -189,19 +341,6 @@
     if (titleOk && artistOk) base = BOTH_BASE + BOTH_STEP * (round - 1);
     else if (titleOk || artistOk) base = STEP * round;
     return round === total ? Math.trunc(base * BONUS_MULTIPLIER) : base;
-  }
-  function maxScore(total) {
-    let sum = 0;
-    for (let r = 1; r <= total; r++) sum += points(r, true, true, total);
-    return sum;
-  }
-  function rankFor(score, total) {
-    const pct = score / maxScore(total);
-    if (pct >= 0.9) return "Certified Jukebox";
-    if (pct >= 0.7) return "Radio Regular";
-    if (pct >= 0.45) return "Car Singer";
-    if (pct >= 0.2) return "Shower Singer";
-    return "Background Noise";
   }
 
   // ---------- Deezer lookups (through the proxy) ----------
@@ -248,21 +387,36 @@
     return track;
   }
 
-  // ---------- Game state ----------
-  let selectedDecade = null;
-  let selectedRounds = DEFAULT_ROUNDS;
-  let game = null;
-  let cur = null;
+  // ---------- Songs already played ----------
+  // Kept per decade for the whole visit, so back-to-back games don't repeat songs.
+  const playedByDecade = new Map();
+  function playedIn(name) {
+    if (!playedByDecade.has(name)) playedByDecade.set(name, new Set());
+    return playedByDecade.get(name);
+  }
 
-  async function findTrack() {
+  async function findTrack(g, decade) {
+    const played = playedIn(decade.name);
     let failures = 0;
-    while (game.queue.length) {
-      const song = game.queue.pop();
+    let level = 0; // 0 = normal, 1 = replay songs from earlier games, 2 = allow repeats
+    for (;;) {
+      if (!g.queues[decade.name]) g.queues[decade.name] = shuffle(decade.songs);
+      const queue = g.queues[decade.name];
+      if (!queue.length) {
+        if (level >= 2) return null;
+        level++;
+        played.clear();
+        if (level === 1) g.used.forEach((id) => played.add(id)); // never repeat within this game
+        g.queues[decade.name] = shuffle(decade.songs);
+        continue;
+      }
+      const song = queue.pop();
       try {
         const track = await resolveSong(song);
         failures = 0;
-        if (track && !game.used.has(track.id)) {
-          game.used.add(track.id);
+        if (track && !played.has(track.id)) {
+          played.add(track.id);
+          g.used.add(track.id);
           return track;
         }
       } catch (err) {
@@ -270,12 +424,43 @@
         await sleep(1000);
       }
     }
-    return null;
   }
-  async function fetchTrack() {
-    try { return { track: await findTrack() }; }
+  async function fetchTrack(g, decade) {
+    try { return { track: await findTrack(g, decade) }; }
     catch (error) { return { error }; }
   }
+
+  // "All decades": every decade comes up once before any repeats
+  function nextDecadeFromBag(g) {
+    if (!g.bag.length) {
+      const s = shuffle(DECADES);
+      if (s.length > 1 && s[0] === g.lastDecade) {
+        const t = s[0]; s[0] = s[s.length - 1]; s[s.length - 1] = t;
+      }
+      g.bag = s;
+    }
+    g.lastDecade = g.bag.shift();
+    return g.lastDecade;
+  }
+
+  // Works out which decade the next turn uses and starts looking for its song
+  function planTurn(g) {
+    const idx = g.planned++;
+    const decade = g.allDecades ? nextDecadeFromBag(g) : g.decade;
+    return { idx, decade, promise: fetchTrack(g, decade) };
+  }
+
+  // ---------- State ----------
+  let selectedDecade = 0; // index into DECADES, or "all"
+  let selectedTeams = DEFAULT_TEAMS;
+  let selectedRounds = DEFAULT_ROUNDS;
+  let selectedSfx = true;
+  let game = null;
+  let cur = null;
+  let phase = "idle"; // idle | loading | clip | tap | guess | revealed | error
+  let paused = false;
+  let guessTimer = null;
+  let guessLeft = 0;
 
   // ---------- Screens ----------
   function show(name) {
@@ -285,46 +470,164 @@
     window.scrollTo(0, 0);
   }
 
-  // Start screen
-  DECADES.forEach((d, i) => {
-    const b = document.createElement("button");
-    b.textContent = d.name;
-    b.addEventListener("click", () => {
-      selectedDecade = i;
-      [...$("decades").children].forEach((c) => c.classList.toggle("selected", c === b));
-      $("start").disabled = false;
+  function makeSeg(el, items, selectedValue, onPick) {
+    items.forEach((it) => {
+      const b = document.createElement("button");
+      b.textContent = it.label;
+      if (it.value === selectedValue) b.classList.add("selected");
+      b.addEventListener("click", () => {
+        onPick(it.value);
+        [...el.children].forEach((c) => c.classList.toggle("selected", c === b));
+      });
+      el.appendChild(b);
     });
-    $("decades").appendChild(b);
-  });
-  ROUND_OPTIONS.forEach((n) => {
-    const b = document.createElement("button");
-    b.textContent = n;
-    if (n === DEFAULT_ROUNDS) b.classList.add("selected");
-    b.addEventListener("click", () => {
-      selectedRounds = n;
-      [...$("rounds").children].forEach((c) => c.classList.toggle("selected", c === b));
-    });
-    $("rounds").appendChild(b);
-  });
+  }
+
+  // Start screen (the first decade is selected at first, like the Windows version)
+  (function buildStart() {
+    const box = $("decades");
+    const add = (label, value, wide) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (wide) b.classList.add("wide");
+      if (value === selectedDecade) b.classList.add("selected");
+      b.addEventListener("click", () => {
+        selectedDecade = value;
+        [...box.children].forEach((c) => c.classList.toggle("selected", c === b));
+      });
+      box.appendChild(b);
+    };
+    DECADES.forEach((d, i) => add(d.name, i, false));
+    add("All decades", "all", true);
+
+    makeSeg($("teams"), TEAM_OPTIONS.map((n) => ({ label: String(n), value: n })), DEFAULT_TEAMS, (v) => { selectedTeams = v; });
+    makeSeg($("rounds"), ROUND_OPTIONS.map((n) => ({ label: String(n), value: n })), DEFAULT_ROUNDS, (v) => { selectedRounds = v; });
+    makeSeg($("sfx"), [{ label: "On", value: true }, { label: "Off", value: false }], true, (v) => { selectedSfx = v; });
+    $("start").disabled = false;
+  })();
 
   $("start").addEventListener("click", () => {
-    if (selectedDecade === null) return;
-    const decade = DECADES[selectedDecade];
+    sfxOn = selectedSfx;
+    sfxInit();
+    const allDecades = selectedDecade === "all";
     game = {
-      decade,
+      allDecades,
+      decade: allDecades ? null : DECADES[selectedDecade],
+      teams: selectedTeams,
       total: selectedRounds,
-      round: 0,
-      score: 0,
+      totalTurns: selectedTeams * selectedRounds,
+      planned: 0,
+      idx: 0, team: 0, round: 1,
+      scores: new Array(selectedTeams).fill(0),
       used: new Set(),
-      queue: shuffle(decade.songs),
+      queues: {},
+      bag: [],
+      lastDecade: null,
       pending: null,
+      retryFn: null,
+      repeatsLeft: 0,
+      mediaFailures: 0,
+      loadToken: 0,
     };
+    paused = false;
     show("game");
-    nextRound();
+    showTurn(planTurn(game));
   });
 
-  // ---------- A round ----------
+  // ---------- Phases ----------
   function setStatus(msg) { $("status").textContent = msg; }
+
+  function setPhase(p) {
+    phase = p;
+    $("tapPlay").hidden = p !== "tap";
+    $("swap").hidden = !(p === "clip" || p === "tap" || p === "guess");
+    const canRepeat = p === "guess" && game && game.repeatsLeft > 0;
+    $("repeat").hidden = !canRepeat;
+    if (canRepeat) $("repeat").textContent = "Repeat Song (" + game.repeatsLeft + " left)";
+    $("retry").hidden = !(p === "error" && game && game.retryFn);
+    $("questions").hidden = !(p === "guess" || p === "revealed");
+    $("check").hidden = p !== "guess";
+    $("pause").disabled = !(p === "clip" || p === "guess");
+  }
+
+  function spin(on) { $("disc").classList.toggle("spinning", on); }
+
+  function updateScoreboard() {
+    if (!game) return;
+    $("scoreLabel").textContent = game.teams === 1
+      ? "Score: " + game.scores[0]
+      : game.scores.map((s, i) => "Team " + (i + 1) + ": " + s).join("   |   ");
+  }
+
+  // ---------- A turn ----------
+  function showTurn(plan) {
+    const g = game;
+    g.idx = plan.idx;
+    g.team = plan.idx % g.teams;
+    g.round = Math.floor(plan.idx / g.teams) + 1;
+    g.repeatsLeft = MAX_REPEATS;
+    g.mediaFailures = 0;
+    g.retryFn = null;
+
+    clearInterval(guessTimer);
+    audio.pause();
+    spin(false);
+    cur = null;
+
+    const isBonus = g.round === g.total;
+    $("roundLabel").textContent = "Round " + g.round + " of " + g.total +
+      (g.allDecades ? "  -  " + plan.decade.name : "");
+    $("roundLabel").classList.toggle("bonusOn", isBonus);
+    $("turnLabel").hidden = g.teams === 1;
+    $("turnLabel").textContent = "Team " + (g.team + 1) + "'s turn";
+    $("bonus").hidden = !isBonus;
+    if (isBonus) $("bonus").textContent = "BONUS ROUND: " + BONUS_MULTIPLIER + "x POINTS!";
+    updateScoreboard();
+    $("reveal").hidden = true;
+
+    presentTrack(g, plan.decade, plan.promise);
+  }
+
+  async function presentTrack(g, decade, promise) {
+    const token = ++g.loadToken;
+    setPhase("loading");
+    $("timer").textContent = "";
+    setStatus("Finding a song...");
+
+    const result = await promise;
+    if (game !== g || g.loadToken !== token) return; // New game, or a newer search took over
+
+    if (result.error) {
+      g.retryFn = () => presentTrack(g, decade, fetchTrack(g, decade));
+      setPhase("error");
+      setStatus("Can't reach Deezer: " + result.error.message);
+      return;
+    }
+    if (!result.track) {
+      g.retryFn = null;
+      setPhase("error");
+      setStatus("No playable songs are left for " + decade.name + ". Try New Game.");
+      return;
+    }
+
+    g.retryFn = null;
+    const track = result.track;
+    cur = {
+      track, decade,
+      choices: makeChoices(track, decade),
+      titlePick: null, artistPick: null, checked: false,
+    };
+    renderChoices($("titleChoices"), cur.choices.titles, "titlePick");
+    renderChoices($("artistChoices"), cur.choices.artists, "artistPick");
+    $("check").disabled = true;
+    $("reveal").hidden = true;
+
+    audio.src = track.preview;
+    startClip();
+
+    // Look up the next turn's song while the players listen
+    if (g.planned < g.totalTurns && !g.pending) g.pending = planTurn(g);
+  }
 
   function makeChoices(track, decade) {
     const songs = decade.songs;
@@ -348,81 +651,123 @@
       const b = document.createElement("button");
       b.textContent = c.text;
       b.addEventListener("click", () => {
-        if (cur.checked) return;
+        if (!cur || cur.checked || phase !== "guess" || paused) return;
         cur[key] = i;
         [...container.children].forEach((x, j) => x.classList.toggle("picked", j === i));
-        $("check").disabled = cur.titlePick === null || cur.artistPick === null;
+        $("check").disabled = cur.titlePick === null && cur.artistPick === null;
       });
       container.appendChild(b);
     });
   }
 
-  async function nextRound() {
-    audio.pause();
-    game.round++;
-    $("reveal").hidden = true;
-    $("retry").hidden = true;
-    $("questions").hidden = true;
-    $("play").disabled = true;
-    $("play").textContent = "Play clip";
-    $("roundLabel").textContent = "Song " + game.round + " of " + game.total;
-    $("scoreLabel").textContent = "Score: " + game.score;
-    const isBonus = game.round === game.total;
-    $("bonus").hidden = !isBonus;
-    if (isBonus) $("bonus").textContent = "Bonus round: points count x" + BONUS_MULTIPLIER;
-    setStatus("Finding a song...");
-
-    const result = game.pending ? await game.pending : await fetchTrack();
-    game.pending = null;
-
-    if (result.error) {
-      setStatus("Could not load a song: " + result.error.message);
-      $("retry").hidden = false;
-      return;
+  // ---------- The clip ----------
+  function startClip() {
+    setPhase("clip");
+    setStatus("Listen...");
+    $("timer").textContent = String(CLIP_SECONDS);
+    try { audio.currentTime = 0; } catch (e) { /* not loaded yet: it starts at 0 anyway */ }
+    const p = audio.play();
+    if (p && p.then) {
+      p.then(
+        () => { if (phase === "clip") spin(true); },
+        () => {
+          // iPhones sometimes need a tap before they will play audio
+          if (phase === "clip") {
+            spin(false);
+            setPhase("tap");
+            setStatus("Tap to hear the clip");
+          }
+        }
+      );
     }
-    if (!result.track) { endGame(); return; }
-
-    const track = result.track;
-    const choices = makeChoices(track, game.decade);
-    cur = { track, choices, titlePick: null, artistPick: null, checked: false };
-    renderChoices($("titleChoices"), choices.titles, "titlePick");
-    renderChoices($("artistChoices"), choices.artists, "artistPick");
-    $("check").disabled = true;
-    $("questions").hidden = false;
-    setStatus("");
-
-    audio.src = track.preview;
-    $("play").disabled = false;
-    audio.play().then(
-      () => { $("play").textContent = "Replay clip"; },
-      () => { /* iPhone needs a tap first: the Play clip button handles it */ }
-    );
-
-    // Look up the next song while the player is listening
-    if (game.round < game.total) game.pending = fetchTrack();
   }
 
+  audio.addEventListener("timeupdate", () => {
+    if (phase !== "clip") return;
+    const left = Math.max(0, Math.ceil(CLIP_SECONDS - audio.currentTime));
+    $("timer").textContent = String(left);
+    if (audio.currentTime >= CLIP_SECONDS) endClip();
+  });
+  audio.addEventListener("ended", () => { if (phase === "clip") endClip(); });
+  audio.addEventListener("loadeddata", () => { if (game) game.mediaFailures = 0; });
+  audio.addEventListener("error", () => {
+    if (!game || !cur || (phase !== "clip" && phase !== "tap")) return;
+    if (game.mediaFailures >= MAX_LOAD_ATTEMPTS) {
+      setStatus("Couldn't play that clip. Try Skip this song.");
+      return;
+    }
+    game.mediaFailures++;
+    swapSong();
+  });
+
+  function endClip() {
+    if (phase !== "clip") return;
+    audio.pause();
+    spin(false);
+    setPhase("guess");
+    guessLeft = GUESS_SECONDS;
+    setStatus("Pick your answers!");
+    $("timer").textContent = String(guessLeft);
+    clearInterval(guessTimer);
+    guessTimer = setInterval(onGuessTick, 1000);
+    $("questions").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function onGuessTick() {
+    if (paused || phase !== "guess") return;
+    guessLeft--;
+    if (guessLeft > 0) {
+      $("timer").textContent = String(guessLeft);
+      if (guessLeft <= TICK_FROM_SECOND) sfx.tick();
+      return;
+    }
+    sfx.buzzer(); // time's up
+    reveal();
+  }
+
+  $("tapPlay").addEventListener("click", () => { sfxInit(); startClip(); });
+
+  $("repeat").addEventListener("click", () => {
+    if (phase !== "guess" || paused || game.repeatsLeft <= 0) return;
+    game.repeatsLeft--;
+    clearInterval(guessTimer);
+    startClip();
+    setStatus("Listen again...");
+  });
+
+  function swapSong() {
+    const g = game;
+    if (!g || !cur) return;
+    clearInterval(guessTimer);
+    audio.pause();
+    spin(false);
+    g.repeatsLeft = MAX_REPEATS;
+    presentTrack(g, cur.decade, fetchTrack(g, cur.decade));
+  }
+  $("swap").addEventListener("click", () => { if (!paused) swapSong(); });
+
   $("retry").addEventListener("click", () => {
-    game.round--;
-    nextRound();
+    if (game && game.retryFn) { const fn = game.retryFn; game.retryFn = null; fn(); }
   });
 
-  $("play").addEventListener("click", () => {
-    audio.currentTime = 0;
-    audio.play().then(
-      () => { $("play").textContent = "Replay clip"; },
-      (err) => setStatus("Could not play the clip: " + err.message)
-    );
-  });
+  // ---------- Answering ----------
+  $("check").addEventListener("click", () => reveal());
 
-  $("check").addEventListener("click", () => {
-    if (cur.checked || cur.titlePick === null || cur.artistPick === null) return;
+  function reveal() {
+    if (!cur || cur.checked) return;
+    const g = game;
+    clearInterval(guessTimer);
+    audio.pause();
+    spin(false);
     cur.checked = true;
-    const titleOk = cur.choices.titles[cur.titlePick].correct;
-    const artistOk = cur.choices.artists[cur.artistPick].correct;
-    const earned = points(game.round, titleOk, artistOk, game.total);
-    game.score += earned;
-    $("scoreLabel").textContent = "Score: " + game.score;
+    setPhase("revealed");
+
+    const titleOk = cur.titlePick !== null && cur.choices.titles[cur.titlePick].correct;
+    const artistOk = cur.artistPick !== null && cur.choices.artists[cur.artistPick].correct;
+    const earned = points(g.round, titleOk, artistOk, g.total);
+    g.scores[g.team] += earned;
+    updateScoreboard();
+    if (titleOk && artistOk) sfx.win();
 
     function mark(container, choices, pick) {
       [...container.children].forEach((b, i) => {
@@ -433,39 +778,126 @@
     }
     mark($("titleChoices"), cur.choices.titles, cur.titlePick);
     mark($("artistChoices"), cur.choices.artists, cur.artistPick);
-    $("check").disabled = true;
 
     const t = cur.track;
+    $("timer").textContent = "";
+    setStatus("The answer is...");
     $("answerLine").textContent = t.title + " \u2013 " + t.artist + " (" + t.year + ")";
     let verdict = "Missed this one.";
     if (titleOk && artistOk) verdict = "Title and artist both right!";
     else if (titleOk) verdict = "You got the title.";
     else if (artistOk) verdict = "You got the artist.";
-    $("resultLine").textContent = verdict + " +" + earned + " points";
+    const who = g.teams === 1 ? "" : "Team " + (g.team + 1) + ": ";
+    $("resultLine").textContent = who + verdict + " " + (earned > 0 ? "+" + earned + " points!" : "No points");
     const cover = $("cover");
     if (t.cover) { cover.src = t.cover; cover.hidden = false; } else { cover.hidden = true; }
-    $("next").textContent = game.round < game.total ? "Next song" : "See results";
+
+    // What the Next button should say
+    const nextIdx = g.idx + 1;
+    let label;
+    if (nextIdx >= g.totalTurns) label = "See Results";
+    else {
+      const nextTeam = nextIdx % g.teams;
+      const nextRound = Math.floor(nextIdx / g.teams) + 1;
+      if (g.teams === 1) label = "Next Round";
+      else if (nextTeam === 0) label = "Round " + nextRound + ": Team 1";
+      else label = "Next: Team " + (nextTeam + 1);
+    }
+    $("next").textContent = label;
     $("reveal").hidden = false;
     $("reveal").scrollIntoView({ behavior: "smooth", block: "nearest" });
-  });
+  }
 
   $("next").addEventListener("click", () => {
-    if (game.round >= game.total) endGame();
-    else nextRound();
+    sfxInit();
+    const g = game;
+    if (g.idx + 1 >= g.totalTurns) { endGame(); return; }
+    const plan = g.pending || planTurn(g);
+    g.pending = null;
+    showTurn(plan);
   });
+
+  // ---------- Pause and New Game ----------
+  function hold() {
+    paused = true;
+    if (phase === "clip") { audio.pause(); spin(false); }
+  }
+  function release() {
+    paused = false;
+    if (phase === "clip") {
+      const p = audio.play();
+      if (p && p.catch) p.catch(() => {});
+      spin(true);
+    }
+  }
+  $("pause").addEventListener("click", () => {
+    if (phase !== "clip" && phase !== "guess") return;
+    hold();
+    $("pauseOverlay").hidden = false;
+  });
+  $("resume").addEventListener("click", () => {
+    $("pauseOverlay").hidden = true;
+    release();
+  });
+  $("newgame").addEventListener("click", () => {
+    if (!game) return;
+    hold();
+    $("confirmOverlay").hidden = false;
+  });
+  $("keepPlaying").addEventListener("click", () => {
+    $("confirmOverlay").hidden = true;
+    release();
+  });
+  $("startOver").addEventListener("click", () => {
+    $("confirmOverlay").hidden = true;
+    resetToStart();
+  });
+
+  function resetToStart() {
+    clearInterval(guessTimer);
+    audio.pause();
+    spin(false);
+    stopSfx();
+    game = null;
+    cur = null;
+    paused = false;
+    phase = "idle";
+    $("pauseOverlay").hidden = true;
+    $("confirmOverlay").hidden = true;
+    show("start");
+  }
 
   // ---------- End ----------
   function endGame() {
+    clearInterval(guessTimer);
     audio.pause();
-    $("finalScore").textContent = game.score;
-    $("finalOf").textContent = "out of " + maxScore(game.total) + " possible (" + game.decade.name + ")";
-    $("finalRank").textContent = rankFor(game.score, game.total);
+    spin(false);
+    const g = game;
+    if (g.teams === 1) {
+      $("finalScore").textContent = "Final score: " + g.scores[0];
+      $("finalRank").textContent = "";
+    } else {
+      $("finalScore").textContent = g.scores.map((s, i) => "Team " + (i + 1) + ": " + s).join("\n");
+      const best = Math.max.apply(null, g.scores);
+      const winners = [];
+      g.scores.forEach((s, i) => { if (s === best) winners.push(i + 1); });
+      $("finalRank").textContent = winners.length === 1
+        ? "Team " + winners[0] + " wins!"
+        : "It's a tie: " + winners.map((n) => "Team " + n).join(" & ");
+    }
     $("shareStatus").textContent = "";
+    phase = "idle";
     show("end");
   }
 
   $("share").addEventListener("click", () => {
-    const text = "I scored " + game.score + " in Song Quiz (" + game.decade.name + "). Can you beat it?";
+    const g = game;
+    if (!g) return;
+    const label = g.allDecades ? "All decades" : g.decade.name;
+    const scoreText = g.teams === 1
+      ? "I scored " + g.scores[0]
+      : g.scores.map((s, i) => "Team " + (i + 1) + " " + s).join(", ");
+    const text = scoreText + " in Music Trivia (" + label + "). Can you beat it?";
     const url = location.href.split("#")[0];
     if (navigator.share) {
       navigator.share({ text, url }).catch(() => {});
@@ -479,7 +911,7 @@
     }
   });
 
-  $("again").addEventListener("click", () => show("start"));
+  $("again").addEventListener("click", () => { game = null; cur = null; show("start"); });
 })();
 </script>
 </body>
