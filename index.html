@@ -91,6 +91,7 @@
   #reveal { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   #reveal .row { display: flex; gap: 14px; align-items: center; }
   #cover { width: 84px; height: 84px; border-radius: 6px; flex: none; background: var(--line); }
+  #quip { font-size: 1.25rem; font-weight: bold; color: var(--accent); margin: 0 0 12px; }
   #answerLine { font-weight: bold; margin: 0 0 4px; }
   #resultLine { margin: 0; color: var(--muted); }
   #next { margin-top: 14px; }
@@ -160,6 +161,7 @@
     </div>
 
     <div id="reveal" hidden>
+      <p id="quip"></p>
       <div class="row">
         <img id="cover" alt="" hidden>
         <div>
@@ -310,6 +312,80 @@
     buzzer: () => playSfx("buzzer"),
     win: () => playSfx("win"),
   };
+
+  // ---------- Comments after each answer (shown on screen, and spoken when sound is on) ----------
+  const QUIPS = {
+    great: [
+      "You nailed it!",
+      "Look at you go!",
+      "Bazinga!",
+      "Music genius!",
+      "You're on fire!",
+      "Boom. Perfect.",
+      "Okay, show-off!",
+      "Ladies and gentlemen, we have a winner!",
+      "Somebody's been listening to the radio!",
+      "Do you take requests?",
+    ],
+    partial: [
+      "Halfway there.",
+      "So close!",
+      "Not bad. Not great, but not bad.",
+      "Half right is still half right.",
+      "Almost. Here's some partial credit.",
+      "Hey, you got something!",
+      "One out of two ain't bad.",
+      "You're warming up.",
+      "Well, that's half the battle.",
+      "Somewhere, a songwriter is half proud of you.",
+    ],
+    miss: [
+      "Wow. Just... wow.",
+      "Were you even listening?",
+      "That was a bold guess. And a wrong one.",
+      "Swing and a miss.",
+      "My toaster has better taste in music.",
+      "Don't quit your day job.",
+      "Oof. That one hurt me, and I'm a website.",
+      "Maybe try listening with your ears next time.",
+      "I've heard better guesses from a houseplant.",
+      "Bless your heart.",
+    ],
+  };
+  let lastQuip = "";
+  function pickQuip(tier) {
+    const list = QUIPS[tier].filter((q) => q !== lastQuip);
+    lastQuip = list[Math.floor(Math.random() * list.length)];
+    return lastQuip;
+  }
+  let quipTimer = null;
+  function cancelSpeech() {
+    clearTimeout(quipTimer);
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+  }
+  function speak(text, delayMs) {
+    if (!sfxOn || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+    clearTimeout(quipTimer);
+    quipTimer = setTimeout(() => {
+      try {
+        window.speechSynthesis.cancel();
+        const u = new window.SpeechSynthesisUtterance(text);
+        u.lang = "en-US";
+        u.rate = 1.05;
+        window.speechSynthesis.speak(u);
+      } catch (e) { /* the voice is a nice extra: ignore any problem */ }
+    }, delayMs || 0);
+  }
+  // iPhones only allow speech after a tap, so a silent "hello" on Start unlocks it
+  function unlockSpeech() {
+    try {
+      if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+        const u = new window.SpeechSynthesisUtterance(" ");
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      }
+    } catch (e) { /* ignore */ }
+  }
 
   // ---------- Helpers ----------
   function shuffle(arr) {
@@ -511,6 +587,7 @@
   $("start").addEventListener("click", () => {
     sfxOn = selectedSfx;
     sfxInit();
+    unlockSpeech();
     const allDecades = selectedDecade === "all";
     game = {
       allDecades,
@@ -574,6 +651,7 @@
     clearInterval(guessTimer);
     audio.pause();
     spin(false);
+    cancelSpeech();
     cur = null;
 
     const isBonus = g.round === g.total;
@@ -724,7 +802,7 @@
       return;
     }
     sfx.buzzer(); // time's up
-    reveal();
+    reveal(true);
   }
 
   $("tapPlay").addEventListener("click", () => { sfxInit(); startClip(); });
@@ -755,7 +833,7 @@
   // ---------- Answering ----------
   $("check").addEventListener("click", () => reveal());
 
-  function reveal() {
+  function reveal(timedOut) {
     if (!cur || cur.checked) return;
     const g = game;
     clearInterval(guessTimer);
@@ -770,6 +848,12 @@
     g.scores[g.team] += earned;
     updateScoreboard();
     if (titleOk && artistOk) sfx.win();
+
+    // A comment to match how they did
+    const tier = titleOk && artistOk ? "great" : (titleOk || artistOk ? "partial" : "miss");
+    const quip = pickQuip(tier);
+    $("quip").textContent = quip;
+    speak(quip, timedOut ? 900 : (tier === "great" ? 700 : 0)); // let the buzzer or chime finish first
 
     function mark(container, choices, pick) {
       [...container.children].forEach((b, i) => {
@@ -860,6 +944,7 @@
     audio.pause();
     spin(false);
     stopSfx();
+    cancelSpeech();
     game = null;
     cur = null;
     paused = false;
@@ -874,6 +959,7 @@
     clearInterval(guessTimer);
     audio.pause();
     spin(false);
+    cancelSpeech();
     const g = game;
     if (g.teams === 1) {
       $("finalScore").textContent = "Final score: " + g.scores[0];
