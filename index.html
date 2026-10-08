@@ -230,6 +230,8 @@
   const MAX_REPEATS = 3;          // replays allowed per song
   const MAX_LOAD_ATTEMPTS = 3;    // clips that may fail to play in a row
   const TICK_FROM_SECOND = 3;     // the countdown ticks for the last few seconds
+  const WIN_CHIME = true;         // the "ta-da" chime when both answers are right (set to false to turn it off)
+  const WIN_VOICE_DELAY_MS = 1000; // how long the spoken comment waits behind the chime (the chime lasts about 1.1 seconds)
 
   const $ = (id) => document.getElementById(id);
   const audio = $("audio");
@@ -906,13 +908,13 @@
     const earned = points(g.round, titleOk, artistOk, g.total);
     g.scores[g.team] += earned;
     updateScoreboard();
-    if (titleOk && artistOk) sfx.win();
+    if (titleOk && artistOk && WIN_CHIME) sfx.win();
 
     // A comment to match how they did
     const tier = titleOk && artistOk ? "great" : (titleOk || artistOk ? "partial" : "miss");
     const quip = pickQuip(tier);
     $("quip").textContent = quip;
-    sayQuip(quip, timedOut ? 900 : (tier === "great" ? 350 : 0)); // after the buzzer on time-up, just behind the chime on a perfect answer
+    sayQuip(quip, timedOut ? 900 : (tier === "great" && WIN_CHIME ? WIN_VOICE_DELAY_MS : 0)); // after the buzzer on time-up, after the chime on a perfect answer
 
     function mark(container, choices, pick) {
       [...container.children].forEach((b, i) => {
