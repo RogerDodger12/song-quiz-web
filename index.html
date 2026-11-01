@@ -493,9 +493,27 @@
   const artistMatches = (have, want) =>
     have.length > 0 && (have.includes(want) || want.includes(have));
 
-  // Skip live, remix, karaoke, tribute versions and live/tribute albums
-  const UNWANTED_VERSION = /\b(live|re-?recorded|remix|karaoke|instrumental|acoustic|demo|cover|tribute|8-bit)\b/i;
-  const UNWANTED_ALBUM = /\b(live|concerts?|unplugged|bbc|sessions|royal albert hall|philharmonic|las vegas|sands|cast recording|broadway|tribute|karaoke|re-?recorded|reunion|duets|celebrates|remix(?:es|ed)?|mixes|taylor.s version|songs of surrender|\d{4} version|nighttime version|on tour|last time out|mix|megamix|reworked|originally performed|malibu)\b/i;
+  // ---------- Which version of a song to use ----------
+  // We want the original studio recording. Titles and albums that give away a live recording, a cover, a remix,
+  // a demo, a rehearsal and so on are skipped, and so are very short tracks (snippets, voice memos, commentary).
+  // A plain title wins; if there isn't one, the first version that isn't obviously a different recording is used.
+  const UNWANTED_VERSION = /\b(live|re-?record\w*|remix|karaoke|instrumental|acoustic|demo|cover|tribute|8-bit|commentary|voice memo|sped up|slowed|nightcore|reverb|taylor.s version|a cappella|acapella|piano version|rehearsal)\b/i;
+  const UNWANTED_ALBUM = /\b(live|concerts?|unplugged|bbc|sessions|royal albert hall|philharmonic|las vegas|sands|cast recording|broadway|tribute|karaoke|re-?recorded|reunion|duets|celebrates|remix(?:es|ed)?|mixes|taylor.s version|songs of surrender|\d{4} version|nighttime version|on tour|last time out|mix|megamix|reworked|originally performed|malibu|sped up|slowed|voice memo|commentary|reimagined|angrier|diwali|b-sides|rarities|outtakes|sawdust|unreleased|alternate|alternative version|acoustic|madstock|bossa|kids|lullaby)\b/i;
+  // Notes in brackets on a track title like "(Remastered 2011)", "(Radio Edit)" or "(feat. Drake)" are harmless.
+  const HARMLESS_NOTES = [
+    /^(\d{4}\s+)?(digitally\s+)?(re-?mastered|remaster)(\s+(version|edition))?(\s+\d{4})?$/i,
+    /^(\d{4}\s+)?(mono|stereo)(\s+(mix|version|remaster(ed)?))?(\s+\d{4})?$/i,
+    /^(original\s+)?(single|album|studio|radio|lp)(\s+(version|edit|mix))?$/i,
+    /^original(\s+version)?$/i,
+    /^(feat\.?|featuring|ft\.?)\s.*$/i,
+    /.*\bfrom\b.*(film|movie|motion picture|soundtrack|series|["\u201c]).*/i,
+    /^[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\s]+$/,
+    /^(explicit|clean|deluxe.*|expanded.*|bonus track|\d{4}|\d+(st|nd|rd|th) anniversary.*)$/i,
+  ];
+  // Any other note that says it is a different recording ("(Dub Mix)", "(Take 1)", "(1981 Re-recording)").
+  const UNWANTED_NOTE = /\b(live|takes?(\s*\d+)?|rehearsal|sessions?|pre-?production|alternat\w*|outtakes?|re-?record\w*|demo|\d{4}\s+version|extended|dub|club|dance|12\W|maxi|megamix|house|edit|cinematic|reimagined|acoustic|instrumental|remix|version|overdub|applause|unplugged|reprise|pianoforte|piano|orchestral|stripped)\b/i;
+  const NOTES = /\(([^)]*)\)|\[([^\]]*)\]/g;
+  const MIN_SECONDS = 95;
 
   // ---------- Scoring ----------
   function points(round, titleOk, artistOk, total) {
@@ -517,6 +535,7 @@
   function pickBestMatch(json, song) {
     const wantTitle = norm(song.title);
     const wantArtist = norm(song.artist);
+    let fallback = null;
     for (const item of json.data || []) {
       if (!item.preview) continue;
       const title = item.title || "";
@@ -526,16 +545,32 @@
       if (!artistMatches(norm(artist), wantArtist)) continue;
       const albumTitle = item.album && item.album.title ? item.album.title : "";
       if (UNWANTED_ALBUM.test(albumTitle)) continue;
-      return {
+      if (!((Number(item.duration) || 0) >= MIN_SECONDS)) continue;
+
+      // Look at any notes in brackets that aren't part of the song's real title.
+      let pristine = true, rejected = false;
+      for (const m of title.matchAll(NOTES)) {
+        const note = (m[1] !== undefined ? m[1] : (m[2] || "")).trim();
+        if (!note || song.title.toLowerCase().includes(note.toLowerCase())) continue;
+        if (HARMLESS_NOTES.some((r) => r.test(note.replace(/^"+|"+$/g, "")))) continue;
+        pristine = false;
+        if (UNWANTED_NOTE.test(note)) { rejected = true; break; }
+      }
+      if (rejected) continue;
+
+      const track = {
         id: item.id,
         title: song.title,
         artist: song.artist,
         year: song.year,
         preview: item.preview,
         cover: item.album && item.album.cover_medium ? item.album.cover_medium : null,
+        rank: Number(item.rank) || 0,
       };
+      if (pristine) return track;
+      if (!fallback) fallback = track;
     }
-    return null;
+    return fallback;
   }
 
   const resolved = new Map(); // song key -> track or null
@@ -550,8 +585,26 @@
   }
 
   // ---------- Songs already played ----------
-  // Kept per decade for the whole visit, so back-to-back games don't repeat songs.
+  // Remembered on this phone, even after the app is closed and reopened. A decade only starts repeating songs
+  // once every song in it has been heard.
+  const HISTORY_KEY = "musicTriviaPlayed";
+  const songKey = (s) => s.title + "|" + s.artist;
   const playedByDecade = new Map();
+  (function loadHistory() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}");
+      Object.keys(saved).forEach((name) => {
+        if (Array.isArray(saved[name])) playedByDecade.set(name, new Set(saved[name]));
+      });
+    } catch (e) { /* no saved history: start fresh */ }
+  })();
+  function saveHistory() {
+    try {
+      const out = {};
+      playedByDecade.forEach((set, name) => { out[name] = [...set]; });
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(out));
+    } catch (e) { /* storage not available: the game still works, it just forgets sooner */ }
+  }
   function playedIn(name) {
     if (!playedByDecade.has(name)) playedByDecade.set(name, new Set());
     return playedByDecade.get(name);
@@ -559,28 +612,32 @@
 
   async function findTrack(g, decade) {
     const played = playedIn(decade.name);
+    const unplayed = () => shuffle(decade.songs.filter((s) => !played.has(songKey(s))));
     let failures = 0;
-    let level = 0; // 0 = normal, 1 = replay songs from earlier games, 2 = allow repeats
+    let level = 0; // 0 = normal, 1 = every song heard: start the cycle again, 2 = allow repeats within this game
     for (;;) {
-      if (!g.queues[decade.name]) g.queues[decade.name] = shuffle(decade.songs);
+      if (!g.queues[decade.name]) g.queues[decade.name] = unplayed();
       const queue = g.queues[decade.name];
       if (!queue.length) {
         if (level >= 2) return null;
         level++;
         played.clear();
-        if (level === 1) g.used.forEach((id) => played.add(id)); // never repeat within this game
-        g.queues[decade.name] = shuffle(decade.songs);
+        if (level === 1) g.used.forEach((k) => played.add(k)); // never repeat within this game
+        saveHistory();
+        g.queues[decade.name] = unplayed();
         continue;
       }
       const song = queue.pop();
       try {
         const track = await resolveSong(song);
         failures = 0;
-        if (track && !played.has(track.id)) {
-          played.add(track.id);
-          g.used.add(track.id);
+        played.add(songKey(song));
+        if (track) {
+          g.used.add(songKey(song));
+          saveHistory();
           return track;
         }
+        // No usable recording for this song: skip it (and don't try it again until the cycle starts over)
       } catch (err) {
         if (++failures >= 3) throw err;
         await sleep(1000);
