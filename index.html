@@ -286,24 +286,84 @@
       return sum * 0.22;
     });
   }
+  let wakeTries = 0;
+  let lastWake = 0;
   function sfxInit() {
     try {
+      const C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return;
+      if (actx && actx.state === "closed") actx = null;
       if (!actx) {
-        const C = window.AudioContext || window.webkitAudioContext;
-        if (C) { actx = new C(); buildSfx(); decodeClips(); }
+        actx = new C();
+        actx.onstatechange = () => { if (actx && actx.state === "running") wakeTries = 0; };
+        buildSfx();
+        decodeClips();
       }
-      if (actx && actx.state === "suspended") actx.resume();
+      if (actx.state !== "running") {
+        const p = actx.resume();
+        if (p && p.catch) p.catch(() => {});
+      }
     } catch (e) { /* sound is a nice extra: never let it get in the way */ }
   }
+  // When the app has been in the background, an iPhone can leave the sound system "interrupted" and it
+  // won't come back by itself. In that case, throw it away and build a fresh one.
+  function rebuildSfx() {
+    try {
+      stopSfx();
+      stopQuipClip();
+      const old = actx;
+      actx = null;
+      Object.keys(sfxBuffers).forEach((k) => { delete sfxBuffers[k]; });
+      Object.keys(quipBuffers).forEach((k) => { delete quipBuffers[k]; });
+      if (old && old.close) {
+        try { const p = old.close(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* ignore */ }
+    sfxInit(); // made during a tap, so the phone lets it start right away
+  }
+  // Runs on every tap during a game: if the sound system went to sleep, wake it before the tap's own sounds play.
+  function wakeSound() {
+    if (!sfxOn || !game) return;
+    if (!actx) { sfxInit(); return; }
+    if (actx.state === "running") { wakeTries = 0; return; }
+    const now = Date.now();
+    if (now - lastWake < 600) return; // one tap fires both touchend and click: count it once
+    lastWake = now;
+    if (actx.state !== "suspended" || wakeTries >= 1) { wakeTries = 0; rebuildSfx(); }
+    else { wakeTries++; sfxInit(); } // first try: just ask it to resume
+  }
+  function wakeQuietly() {
+    try {
+      if (actx && actx.state !== "running" && actx.state !== "closed") {
+        const p = actx.resume();
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) { /* ignore */ }
+  }
+  document.addEventListener("click", wakeSound, { capture: true, passive: true });
+  document.addEventListener("touchend", wakeSound, { capture: true, passive: true });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) wakeQuietly(); });
+  window.addEventListener("pageshow", wakeQuietly);
+
   function playSfx(name) {
     if (!sfxOn || !actx || !sfxBuffers[name]) return;
+    const go = () => {
+      try {
+        const buf = sfxBuffers[name];
+        if (!actx || !buf) return;
+        const src = actx.createBufferSource();
+        src.buffer = buf;
+        src.connect(actx.destination);
+        src.onended = () => activeSfx.delete(src);
+        activeSfx.add(src);
+        src.start();
+      } catch (e) { /* ignore */ }
+    };
+    if (actx.state === "running") { go(); return; }
+    // The phone put the sound system to sleep: wake it, then play if it wakes up
     try {
-      const src = actx.createBufferSource();
-      src.buffer = sfxBuffers[name];
-      src.connect(actx.destination);
-      src.onended = () => activeSfx.delete(src);
-      activeSfx.add(src);
-      src.start();
+      const p = actx.resume();
+      if (p && p.then) p.then(() => { if (actx && actx.state === "running") go(); }, () => {});
     } catch (e) { /* ignore */ }
   }
   function stopSfx() {
