@@ -242,26 +242,43 @@
   }
 
   // ---------- Sound effects (the same sounds the Windows version generates) ----------
+  // The effects are tiny WAV files made on the fly and played through ordinary audio elements, the same way the
+  // song clips are. (Web Audio, which this used before, goes silent on iPhones after you switch to another app
+  // and come back, even though it still says it is running. Ordinary audio elements don't have that problem.)
   let sfxOn = true;
-  let actx = null;
-  const sfxBuffers = {};
-  const activeSfx = new Set();
+  const SAMPLE_RATE = 44100;
+  const fx = {};          // name -> audio element: buzzer, tick, win, voice
+  let fxReady = false;
+  let needUnlock = false;
 
-  function makeBuffer(seconds, level) {
-    const sr = actx.sampleRate;
-    const n = Math.floor(sr * seconds);
-    const buf = actx.createBuffer(1, n, sr);
-    const d = buf.getChannelData(0);
+  function makeWavUrl(seconds, level) {
+    const n = Math.floor(SAMPLE_RATE * seconds);
+    const buf = new ArrayBuffer(44 + n * 2);
+    const v = new DataView(buf);
+    const str = (o, text) => { for (let i = 0; i < text.length; i++) v.setUint8(o + i, text.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE"); str(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SAMPLE_RATE, true); v.setUint32(28, SAMPLE_RATE * 2, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, "data"); v.setUint32(40, n * 2, true);
     for (let i = 0; i < n; i++) {
-      const t = i / sr;
+      const t = i / SAMPLE_RATE;
       const endFade = Math.min(1.0, (seconds - t) / 0.02); // no click at the very end
-      d[i] = Math.max(-1, Math.min(1, level(t) * endFade));
+      const x = Math.max(-1, Math.min(1, level(t) * endFade));
+      v.setInt16(44 + i * 2, Math.round(x * 32767), true);
     }
-    return buf;
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+  function makeFx(name, seconds, level) {
+    const el = new Audio();
+    el.preload = "auto";
+    el.dataset.fx = name;
+    el.src = makeWavUrl(seconds, level);
+    fx[name] = el;
   }
   function buildSfx() {
     // A short, harsh game-show buzzer
-    sfxBuffers.buzzer = makeBuffer(0.9, (t) => {
+    makeFx("buzzer", 0.9, (t) => {
       const wave = (Math.sign(Math.sin(2 * Math.PI * 150 * t)) +
                     Math.sign(Math.sin(2 * Math.PI * 157 * t))) / 2.0;
       const fadeIn = Math.min(1.0, t / 0.01);
@@ -269,12 +286,12 @@
       return wave * fadeIn * fadeOut * 0.45;
     });
     // A soft, short click for the last seconds of the countdown
-    sfxBuffers.tick = makeBuffer(0.07, (t) =>
+    makeFx("tick", 0.07, (t) =>
       Math.sin(2 * Math.PI * 1200 * t) * Math.exp(-t * 80) * 0.55);
     // Four quick rising notes (C, E, G, high C): a little "ta-da"
     const pitch = [523.25, 659.25, 783.99, 1046.50];
     const start = [0.00, 0.11, 0.22, 0.33];
-    sfxBuffers.win = makeBuffer(1.1, (t) => {
+    makeFx("win", 1.1, (t) => {
       let sum = 0;
       for (let i = 0; i < pitch.length; i++) {
         const n = t - start[i];
@@ -285,95 +302,54 @@
       }
       return sum * 0.22;
     });
+    // Holds the spoken comments (it starts out as a moment of silence)
+    makeFx("voice", 0.05, () => 0);
   }
-  let wakeTries = 0;
-  let lastWake = 0;
+  // iPhones only let an audio element play on its own after it has been played during a tap, so every element
+  // gets a silent (muted) play during the Start tap.
+  function unlockFx() {
+    Object.keys(fx).forEach((name) => {
+      const el = fx[name];
+      if (!el.paused) return; // already making sound: leave it alone
+      try {
+        el.muted = true;
+        const p = el.play();
+        const done = () => {
+          try { el.pause(); el.currentTime = 0; } catch (e) { /* ignore */ }
+          el.muted = false;
+          el.unlocking = null;
+        };
+        if (p && p.then) el.unlocking = p.then(done, done); else done();
+      } catch (e) { el.muted = false; el.unlocking = null; }
+    });
+  }
   function sfxInit() {
     try {
-      const C = window.AudioContext || window.webkitAudioContext;
-      if (!C) return;
-      if (actx && actx.state === "closed") actx = null;
-      if (!actx) {
-        actx = new C();
-        actx.onstatechange = () => { if (actx && actx.state === "running") wakeTries = 0; };
-        buildSfx();
-        decodeClips();
-      }
-      if (actx.state !== "running") {
-        const p = actx.resume();
-        if (p && p.catch) p.catch(() => {});
-      }
+      if (!fxReady) { buildSfx(); fxReady = true; unlockFx(); }
+      else if (needUnlock) { needUnlock = false; unlockFx(); }
     } catch (e) { /* sound is a nice extra: never let it get in the way */ }
   }
-  // When the app has been in the background, an iPhone can leave the sound system "interrupted" and it
-  // won't come back by itself. In that case, throw it away and build a fresh one.
-  function rebuildSfx() {
-    try {
-      stopSfx();
-      stopQuipClip();
-      const old = actx;
-      actx = null;
-      Object.keys(sfxBuffers).forEach((k) => { delete sfxBuffers[k]; });
-      Object.keys(quipBuffers).forEach((k) => { delete quipBuffers[k]; });
-      if (old && old.close) {
-        try { const p = old.close(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ }
-      }
-    } catch (e) { /* ignore */ }
-    sfxInit(); // made during a tap, so the phone lets it start right away
-  }
-  // Runs on every tap during a game: if the sound system went to sleep, wake it before the tap's own sounds play.
-  function wakeSound() {
-    if (!sfxOn || !game) return;
-    if (!actx) { sfxInit(); return; }
-    if (actx.state === "running") { wakeTries = 0; return; }
-    const now = Date.now();
-    if (now - lastWake < 600) return; // one tap fires both touchend and click: count it once
-    lastWake = now;
-    if (actx.state !== "suspended" || wakeTries >= 1) { wakeTries = 0; rebuildSfx(); }
-    else { wakeTries++; sfxInit(); } // first try: just ask it to resume
-  }
-  function wakeQuietly() {
-    try {
-      if (actx && actx.state !== "running" && actx.state !== "closed") {
-        const p = actx.resume();
-        if (p && p.catch) p.catch(() => {});
-      }
-    } catch (e) { /* ignore */ }
-  }
-  document.addEventListener("click", wakeSound, { capture: true, passive: true });
-  document.addEventListener("touchend", wakeSound, { capture: true, passive: true });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) wakeQuietly(); });
-  window.addEventListener("pageshow", wakeQuietly);
-
-  function playSfx(name) {
-    if (!sfxOn || !actx || !sfxBuffers[name]) return;
+  function playFx(name) {
+    if (!sfxOn) return;
+    const el = fx[name];
+    if (!el) return;
     const go = () => {
       try {
-        const buf = sfxBuffers[name];
-        if (!actx || !buf) return;
-        const src = actx.createBufferSource();
-        src.buffer = buf;
-        src.connect(actx.destination);
-        src.onended = () => activeSfx.delete(src);
-        activeSfx.add(src);
-        src.start();
-      } catch (e) { /* ignore */ }
+        el.muted = false;
+        el.currentTime = 0;
+        const p = el.play();
+        if (p && p.catch) p.catch(() => { needUnlock = true; });
+      } catch (e) { needUnlock = true; }
     };
-    if (actx.state === "running") { go(); return; }
-    // The phone put the sound system to sleep: wake it, then play if it wakes up
-    try {
-      const p = actx.resume();
-      if (p && p.then) p.then(() => { if (actx && actx.state === "running") go(); }, () => {});
-    } catch (e) { /* ignore */ }
+    if (el.unlocking) el.unlocking.then(go); else go();
   }
   function stopSfx() {
-    activeSfx.forEach((s) => { try { s.stop(); } catch (e) { /* already stopped */ } });
-    activeSfx.clear();
+    Object.keys(fx).forEach((name) => { try { fx[name].pause(); } catch (e) { /* ignore */ } });
   }
   const sfx = {
-    tick: () => playSfx("tick"),
-    buzzer: () => playSfx("buzzer"),
-    win: () => playSfx("win"),
+    tick: () => playFx("tick"),
+    buzzer: () => playFx("buzzer"),
+    win: () => playFx("win"),
   };
 
   // ---------- Comments after each answer (shown on screen, and played from recordings when sound is on) ----------
@@ -465,47 +441,33 @@
     if (!delayMs) { speakNow(text); return; } // straight from the tap, which iPhones like best
     quipTimer = setTimeout(() => speakNow(text), delayMs);
   }
-  // Recorded voice: the clips in voices.js are decoded once the game starts, then played through the same
-  // audio system as the chime. If a clip isn't ready (or voices.js is missing), the phone's own voice steps in.
-  const quipBuffers = {};
-  let quipSource = null;
-  function dataToArrayBuffer(uri) {
-    const bin = atob(uri.slice(uri.indexOf(",") + 1));
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return bytes.buffer;
-  }
-  function decodeClips() {
-    if (!actx || typeof QUIP_AUDIO === "undefined") return;
-    Object.keys(QUIP_AUDIO).forEach((text) => {
-      if (quipBuffers[text]) return;
-      try {
-        const p = actx.decodeAudioData(dataToArrayBuffer(QUIP_AUDIO[text]),
-          (buf) => { quipBuffers[text] = buf; }, () => { /* skip a clip that won't decode */ });
-        if (p && p.catch) p.catch(() => {});
-      } catch (e) { /* ignore */ }
-    });
-  }
+  // Spoken comments: the recordings in voices.js are played through the "voice" audio element. If a recording
+  // isn't there (or the phone won't play it), the phone's own voice steps in.
   function stopQuipClip() {
-    if (quipSource) { try { quipSource.stop(); } catch (e) { /* already finished */ } quipSource = null; }
+    const el = fx.voice;
+    if (el) { try { el.pause(); } catch (e) { /* ignore */ } }
   }
-  function playQuipClip(text, delaySec) {
-    const buf = quipBuffers[text];
-    if (!actx || !buf) return false;
-    try {
-      stopQuipClip();
-      const src = actx.createBufferSource();
-      src.buffer = buf;
-      src.connect(actx.destination);
-      src.onended = () => { if (quipSource === src) quipSource = null; };
-      quipSource = src;
-      src.start(actx.currentTime + (delaySec || 0));
-      return true;
-    } catch (e) { return false; }
+  function playVoiceClip(text, delayMs) {
+    const uri = typeof QUIP_AUDIO !== "undefined" ? QUIP_AUDIO[text] : null;
+    const el = fx.voice;
+    if (!uri || !el) return false;
+    clearTimeout(quipTimer);
+    const go = () => {
+      try {
+        el.pause();
+        el.src = uri;
+        el.muted = false;
+        const p = el.play();
+        if (p && p.catch) p.catch(() => { needUnlock = true; speakNow(text); });
+      } catch (e) { speakNow(text); }
+    };
+    const start = () => { if (el.unlocking) el.unlocking.then(go); else go(); };
+    if (delayMs) quipTimer = setTimeout(start, delayMs); else start();
+    return true;
   }
   function sayQuip(text, delayMs) {
     if (!sfxOn) return;
-    if (playQuipClip(text, (delayMs || 0) / 1000)) return;
+    if (playVoiceClip(text, delayMs)) return;
     speak(text, delayMs);
   }
 
